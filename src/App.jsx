@@ -1,49 +1,125 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, LogOut, Home, Box, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { auth, db, googleProvider, microsoftProvider } from './firebase';
+import { 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  doc, 
+  setDoc, 
+  getDoc, 
+  collection, 
+  addDoc, 
+  query, 
+  where, 
+  orderBy, 
+  getDocs,
+  serverTimestamp,
+  updateDoc
+} from 'firebase/firestore';
 
-// Mock authentication - In production, replace with Firebase Auth
+// Custom hook for Firebase authentication
 const useAuth = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate checking for existing session
-    setTimeout(() => {
-      const savedUser = sessionStorage.getItem('user');
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in
+        setUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL,
+          provider: firebaseUser.providerData[0]?.providerId
+        });
+
+        // Update user profile in Firestore
+        await updateUserProfile(firebaseUser);
+        // Log successful login
+        await logAuthEvent(firebaseUser.uid, 'login', true);
+      } else {
+        // User is signed out
+        setUser(null);
       }
       setLoading(false);
-    }, 500);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const loginWithGoogle = () => {
-    // Mock login - Replace with actual Firebase Google Auth
-    const mockUser = {
-      id: '1',
-      name: 'Demo User',
-      email: 'demo@gmail.com',
-      provider: 'google'
-    };
-    setUser(mockUser);
-    sessionStorage.setItem('user', JSON.stringify(mockUser));
+  const updateUserProfile = async (firebaseUser) => {
+    try {
+      const userRef = doc(db, 'users', firebaseUser.uid);
+      const userDoc = await getDoc(userRef);
+      
+      const userData = {
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoURL: firebaseUser.photoURL,
+        provider: firebaseUser.providerData[0]?.providerId,
+        lastLogin: serverTimestamp(),
+        loginCount: userDoc.exists() ? (userDoc.data().loginCount || 0) + 1 : 1
+      };
+
+      if (!userDoc.exists()) {
+        userData.createdAt = serverTimestamp();
+      }
+
+      await setDoc(userRef, userData, { merge: true });
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+    }
   };
 
-  const loginWithMicrosoft = () => {
-    // Mock login - Replace with actual Firebase Microsoft Auth
-    const mockUser = {
-      id: '2',
-      name: 'Demo User',
-      email: 'demo@outlook.com',
-      provider: 'microsoft'
-    };
-    setUser(mockUser);
-    sessionStorage.setItem('user', JSON.stringify(mockUser));
+  const logAuthEvent = async (userId, eventType, success) => {
+    try {
+      await addDoc(collection(db, 'auth_logs'), {
+        userId,
+        eventType,
+        success,
+        provider: auth.currentUser?.providerData[0]?.providerId,
+        timestamp: serverTimestamp(),
+        userAgent: navigator.userAgent
+      });
+    } catch (error) {
+      console.error('Error logging auth event:', error);
+    }
   };
 
-  const logout = () => {
-    setUser(null);
-    sessionStorage.removeItem('user');
+  const loginWithGoogle = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error('Google login error:', error);
+      await logAuthEvent(null, 'login_failed', false);
+      alert('Login failed: ' + error.message);
+    }
+  };
+
+  const loginWithMicrosoft = async () => {
+    try {
+      await signInWithPopup(auth, microsoftProvider);
+    } catch (error) {
+      console.error('Microsoft login error:', error);
+      await logAuthEvent(null, 'login_failed', false);
+      alert('Login failed: ' + error.message);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      if (user) {
+        await logAuthEvent(user.uid, 'logout', true);
+      }
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+      alert('Logout failed: ' + error.message);
+    }
   };
 
   return { user, loading, loginWithGoogle, loginWithMicrosoft, logout };
@@ -234,6 +310,7 @@ const CameraCapture = ({ onCapture, onClose }) => {
 // Project Card Component
 const ProjectCard = ({ project }) => {
   const statusConfig = {
+    uploading: { color: 'bg-blue-100 text-blue-800', icon: Upload, text: 'Uploading' },
     processing: { color: 'bg-yellow-100 text-yellow-800', icon: Loader, text: 'Processing' },
     completed: { color: 'bg-green-100 text-green-800', icon: CheckCircle, text: 'Completed' },
     failed: { color: 'bg-red-100 text-red-800', icon: AlertCircle, text: 'Failed' }
@@ -259,7 +336,7 @@ const ProjectCard = ({ project }) => {
       </div>
       <div className="p-4">
         <h3 className="font-semibold text-gray-900 mb-1">{project.name}</h3>
-        <p className="text-sm text-gray-500">{project.imageCount} images • {project.date}</p>
+        <p className="text-sm text-gray-500">{project.imageCount} images • {new Date(project.createdAt).toLocaleDateString()}</p>
         {project.status === 'completed' && project.objectCount && (
           <p className="text-sm text-indigo-600 mt-2">{project.objectCount} objects detected</p>
         )}
@@ -271,54 +348,88 @@ const ProjectCard = ({ project }) => {
 // Main Home/Dashboard Component
 const HomePage = ({ user, onLogout }) => {
   const [showCamera, setShowCamera] = useState(false);
-  const [projects, setProjects] = useState([
-    {
-      id: 1,
-      name: 'Living Room Scan',
-      status: 'completed',
-      imageCount: 8,
-      objectCount: 24,
-      date: '2 days ago',
-      thumbnail: null
-    },
-    {
-      id: 2,
-      name: 'Bedroom Scan',
-      status: 'processing',
-      imageCount: 6,
-      date: '1 hour ago',
-      thumbnail: null
-    }
-  ]);
+  const [projects, setProjects] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      loadProjects();
+    }
+  }, [user]);
+
+  const loadProjects = async () => {
+    try {
+      const q = query(
+        collection(db, 'projects'),
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const projectsData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate().getTime() || Date.now()
+      }));
+      
+      setProjects(projectsData);
+    } catch (error) {
+      console.error('Error loading projects:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCapture = async (capturedImages) => {
     setShowCamera(false);
     setIsProcessing(true);
 
-    // Create new project
-    const newProject = {
-      id: Date.now(),
-      name: `Room Scan ${projects.length + 1}`,
-      status: 'processing',
-      imageCount: capturedImages.length,
-      date: 'Just now',
-      thumbnail: capturedImages[0].url
-    };
+    try {
+      // Create new project in Firestore
+      const projectData = {
+        userId: user.uid,
+        name: `Room Scan ${projects.length + 1}`,
+        status: 'uploading',
+        imageCount: capturedImages.length,
+        createdAt: serverTimestamp(),
+        thumbnail: capturedImages[0].url,
+        images: []
+      };
 
-    setProjects(prev => [newProject, ...prev]);
+      const docRef = await addDoc(collection(db, 'projects'), projectData);
 
-    // Simulate ML processing
-    // In production: Upload images to cloud storage, trigger ML pipeline
-    setTimeout(() => {
-      setProjects(prev => prev.map(p => 
-        p.id === newProject.id 
-          ? { ...p, status: 'completed', objectCount: Math.floor(Math.random() * 30) + 10 }
-          : p
-      ));
+      // In real implementation, you would:
+      // 1. Upload images to Google Cloud Storage
+      // 2. Get GCS paths
+      // 3. Update project with image paths
+      // 4. Trigger ML processing
+
+      // Simulate processing
+      setTimeout(async () => {
+        await updateDoc(doc(db, 'projects', docRef.id), {
+          status: 'completed',
+          objectCount: Math.floor(Math.random() * 30) + 10
+        });
+        
+        await loadProjects();
+        setIsProcessing(false);
+      }, 5000);
+
+    } catch (error) {
+      console.error('Error creating project:', error);
+      alert('Failed to create project: ' + error.message);
       setIsProcessing(false);
-    }, 5000);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader className="w-8 h-8 text-indigo-600 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -331,7 +442,7 @@ const HomePage = ({ user, onLogout }) => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Find Them All</h1>
-              <p className="text-sm text-gray-500">Welcome, {user.name}</p>
+              <p className="text-sm text-gray-500">Welcome, {user.displayName || user.email}</p>
             </div>
           </div>
           <button
@@ -391,7 +502,7 @@ const HomePage = ({ user, onLogout }) => {
               <div>
                 <p className="text-sm text-gray-500">Processing</p>
                 <p className="text-3xl font-bold text-gray-900">
-                  {projects.filter(p => p.status === 'processing').length}
+                  {projects.filter(p => p.status === 'processing' || p.status === 'uploading').length}
                 </p>
               </div>
               <Loader className="w-10 h-10 text-yellow-600" />
@@ -423,21 +534,21 @@ const HomePage = ({ user, onLogout }) => {
           )}
         </div>
 
-        {/* ML Integration Notice */}
+        {/* Integration Notice */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
           <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
             <AlertCircle className="w-5 h-5" />
-            ML Pipeline Integration Required
+            Next Steps: GCS Upload & ML Pipeline
           </h3>
           <p className="text-sm text-blue-800">
-            This is a demo interface. To enable actual 3D reconstruction and object detection, you'll need to:
+            Firebase Authentication is working! Next, you'll need to:
           </p>
           <ul className="list-disc list-inside text-sm text-blue-800 mt-2 space-y-1">
-            <li>Set up Firebase Storage for image uploads</li>
-            <li>Create a Python backend (Flask/FastAPI) for ML processing</li>
-            <li>Integrate 3D reconstruction models (NeRF, Gaussian Splatting, or COLMAP)</li>
-            <li>Add object detection models (YOLO, Detectron2)</li>
-            <li>Deploy on cloud GPU (Google Cloud, AWS, or Azure)</li>
+            <li>Set up Google Cloud Storage bucket</li>
+            <li>Create backend API for signed URLs</li>
+            <li>Implement image upload to GCS</li>
+            <li>Build ML processing pipeline</li>
+            <li>Integrate object detection and 3D reconstruction</li>
           </ul>
         </div>
       </main>
