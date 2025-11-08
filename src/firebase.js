@@ -5,12 +5,12 @@ import { getFirestore } from 'firebase/firestore';
 
 // Your Firebase configuration (paste yours here)
 const firebaseConfig = {
-    apiKey: "AIzaSyDdfZJv7Wl7uWMor7saI3bGmJWqciPo5Rc",
-    authDomain: "find-them-all-249c5.firebaseapp.com",
-    projectId: "find-them-all-249c5",
-    storageBucket: "find-them-all-249c5.firebasestorage.app",
-    messagingSenderId: "427127613501",
-    appId: "1:427127613501:web:250e4fe8498a28e3a16254"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
