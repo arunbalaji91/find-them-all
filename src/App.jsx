@@ -19,6 +19,7 @@ import {
   serverTimestamp,
   updateDoc
 } from 'firebase/firestore';
+import { Analytics } from "@vercel/analytics/next"
 
 // Custom hook for Firebase authentication
 const useAuth = () => {
