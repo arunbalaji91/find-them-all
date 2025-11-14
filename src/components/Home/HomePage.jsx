@@ -50,8 +50,14 @@ export const HomePage = ({ user, onLogout }) => {
     setIsProcessing(true);
     setUploadProgress('Creating project...');
 
+    console.log('📸 Starting upload process for', capturedImages.length, 'images');
+
     try {
+      console.log('🔑 Getting Firebase token...');
       const firebaseToken = await auth.currentUser.getIdToken();
+      console.log('✅ Firebase token obtained');
+
+      console.log('📝 Creating project document...');
       const projectData = {
         userId: user.uid,
         name: `Room Scan ${projects.length + 1}`,
@@ -61,46 +67,67 @@ export const HomePage = ({ user, onLogout }) => {
         images: []
       };
       const docRef = await addDoc(collection(db, 'projects'), projectData);
+      console.log('✅ Project created with ID:', docRef.id);
       
       const uploadedImages = [];
       for (let i = 0; i < capturedImages.length; i++) {
-        setUploadProgress(`Uploading image ${i + 1}/${capturedImages.length}...`);
-        const { gcsPath, publicUrl } = await uploadToGCS(
-          capturedImages[i].blob,
-          `image_${i + 1}.jpg`,
-          firebaseToken
-        );
-        uploadedImages.push({
-          imageId: `img_${Date.now()}_${i}`,
-          gcsPath,
-          publicUrl,
-          fileName: `image_${i + 1}.jpg`,
-          uploadedAt: serverTimestamp(),
-          size: capturedImages[i].blob.size
-        });
+        try {
+          console.log(`\n📤 Uploading image ${i + 1}/${capturedImages.length}...`);
+          setUploadProgress(`Uploading image ${i + 1}/${capturedImages.length}...`);
+          
+          const { gcsPath, publicUrl } = await uploadToGCS(
+            capturedImages[i].blob,
+            `projects/${docRef.id}/image_${i + 1}.jpg`,
+            firebaseToken
+          );
+          
+          console.log(`✅ Image ${i + 1} uploaded successfully`);
+          
+          uploadedImages.push({
+            imageId: `img_${Date.now()}_${i}`,
+            gcsPath,
+            publicUrl,
+            fileName: `image_${i + 1}.jpg`,
+            uploadedAt: serverTimestamp(),
+            size: capturedImages[i].blob.size
+          });
+        } catch (imageError) {
+          console.error(`❌ Failed to upload image ${i + 1}:`, imageError);
+          setUploadProgress(`Error uploading image ${i + 1}: ${imageError.message}`);
+          throw imageError;
+        }
       }
+      
+      console.log(`\n📊 All images uploaded! Updating project document with ${uploadedImages.length} images...`);
+      setUploadProgress('Saving upload details...');
       
       await updateDoc(doc(db, 'projects', docRef.id), {
         status: 'processing',
         images: uploadedImages
       });
       
+      console.log('✅ Project document updated');
       setUploadProgress('Upload complete! Processing with ML...');
       await loadProjects();
       
+      console.log('⏳ Waiting for ML processing to complete...');
       setTimeout(async () => {
+        console.log('🎉 ML processing complete, updating status...');
         await updateDoc(doc(db, 'projects', docRef.id), {
           status: 'completed',
           objectCount: Math.floor(Math.random() * 30) + 10
         });
         await loadProjects();
+        console.log('✅ All done!');
       }, 3000);
     } catch (error) {
-      console.error('Error:', error);
-      alert('Upload failed: ' + error.message);
+      console.error('❌ Upload Process Error:', error);
+      console.error('Error message:', error.message);
+      console.error('Full error:', error);
+      setUploadProgress(`❌ Error: ${error.message}`);
+      alert('Upload failed: ' + error.message + '\n\nCheck browser console (F12) for details');
     } finally {
       setIsProcessing(false);
-      setUploadProgress('');
     }
   };
 
