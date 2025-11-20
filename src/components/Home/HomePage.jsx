@@ -1,96 +1,85 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, LogOut, Box, Loader } from 'lucide-react';
-import { auth, db } from '../../firebase';
-import { 
-  collection, 
-  addDoc, 
-  query, 
-  where, 
-  orderBy, 
-  getDocs,
-  doc,
-  updateDoc,
-  serverTimestamp
-} from 'firebase/firestore';
 import { CameraCapture } from '../Camera/CameraCapture';
 import { StatsCards } from './StatsCards';
 import { ProjectsGrid } from './ProjectsGrid';
-import { uploadToGCS } from '../../utils/uploadToGCS';
+import { uploadToGCS, listGroups } from '../../utils/uploadToGCS';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const HomePage = ({ user, onLogout }) => {
   const [showCamera, setShowCamera] = useState(false);
-  const [projects, setProjects] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploadProgress, setUploadProgress] = useState('');
 
   useEffect(() => {
-    if (user) loadProjects();
+    if (user) {
+      loadGroups();
+    }
   }, [user]);
 
-  const loadProjects = async () => {
+  /**
+   * Load all groups for current user from backend
+   * Session cookie is automatically included via credentials: 'include'
+   */
+  const loadGroups = async () => {
     try {
-      const q = query(collection(db, 'projects'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
-      const projectsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate().getTime() || Date.now()
-      }));
-      setProjects(projectsData);
+      console.log('📋 Loading groups from backend...');
+      const data = await listGroups(20, 0);
+      setGroups(data.groups || []);
+      console.log('✅ Groups loaded:', data.groups?.length || 0);
     } catch (error) {
-      console.error('Error loading projects:', error);
+      console.error('❌ Error loading groups:', error);
+      setGroups([]);
     } finally {
       setLoading(false);
     }
   };
 
+  /**
+   * Handle captured images from camera
+   * Upload to backend which handles: validation, group creation, ML processing
+   */
   const handleCapture = async (capturedImages) => {
     setShowCamera(false);
     setIsProcessing(true);
-    setUploadProgress('Creating project...');
+    setUploadProgress('Starting upload...');
 
     console.log('📸 Starting upload process for', capturedImages.length, 'images');
 
     try {
-      console.log('🔑 Getting Firebase token...');
-      const firebaseToken = await auth.currentUser.getIdToken();
-      console.log('✅ Firebase token obtained');
+      // Create group name from timestamp
+      const groupName = `Room Scan ${new Date().toLocaleString()}`;
+      console.log('📁 Group name:', groupName);
 
-      console.log('📝 Creating project document...');
-      const projectData = {
-        userId: user.uid,
-        name: `Room Scan ${projects.length + 1}`,
-        status: 'uploading',
-        imageCount: capturedImages.length,
-        createdAt: serverTimestamp(),
-        images: []
-      };
-      const docRef = await addDoc(collection(db, 'projects'), projectData);
-      console.log('✅ Project created with ID:', docRef.id);
-      
-      const uploadedImages = [];
+      const uploadedCount = capturedImages.length;
+      let uploadedImages = [];
+
+      // Upload each image to backend
       for (let i = 0; i < capturedImages.length; i++) {
         try {
           console.log(`\n📤 Uploading image ${i + 1}/${capturedImages.length}...`);
           setUploadProgress(`Uploading image ${i + 1}/${capturedImages.length}...`);
           
-          const { gcsPath, publicUrl } = await uploadToGCS(
+          // Call uploadToGCS with NEW signature (no firebaseToken)
+          const result = await uploadToGCS(
             capturedImages[i].blob,
-            `image_${i + 1}.jpg`,  // ← Simple name, not full path
-            firebaseToken
+            `image_${i + 1}.jpg`,
+            groupName  // ✅ Pass groupName instead of firebaseToken
           );
           
           console.log(`✅ Image ${i + 1} uploaded successfully`);
+          console.log('   - Group ID:', result.groupId);
           
           uploadedImages.push({
-            imageId: `img_${Date.now()}_${i}`,
-            gcsPath,
-            publicUrl,
-            fileName: `image_${i + 1}.jpg`,
-            uploadedAt: serverTimestamp(),
-            size: capturedImages[i].blob.size
+            index: i + 1,
+            groupId: result.groupId,
+            gcsPath: result.gcsPath,
+            publicUrl: result.publicUrl
           });
+
         } catch (imageError) {
           console.error(`❌ Failed to upload image ${i + 1}:`, imageError);
           setUploadProgress(`Error uploading image ${i + 1}: ${imageError.message}`);
@@ -98,32 +87,19 @@ export const HomePage = ({ user, onLogout }) => {
         }
       }
       
-      console.log(`\n📊 All images uploaded! Updating project document with ${uploadedImages.length} images...`);
-      setUploadProgress('Saving upload details...');
-      
-      await updateDoc(doc(db, 'projects', docRef.id), {
-        status: 'processing',
-        images: uploadedImages
-      });
-      
-      console.log('✅ Project document updated');
+      console.log(`\n✅ All ${uploadedCount} images uploaded!`);
       setUploadProgress('Upload complete! Processing with ML...');
-      await loadProjects();
       
-      console.log('⏳ Waiting for ML processing to complete...');
-      setTimeout(async () => {
-        console.log('🎉 ML processing complete, updating status...');
-        await updateDoc(doc(db, 'projects', docRef.id), {
-          status: 'completed',
-          objectCount: Math.floor(Math.random() * 30) + 10
-        });
-        await loadProjects();
-        console.log('✅ All done!');
-      }, 3000);
+      // Reload groups from backend
+      console.log('🔄 Reloading groups...');
+      await loadGroups();
+      
+      console.log('🎉 All done!');
+      setUploadProgress('');
+
     } catch (error) {
       console.error('❌ Upload Process Error:', error);
       console.error('Error message:', error.message);
-      console.error('Full error:', error);
       setUploadProgress(`❌ Error: ${error.message}`);
       alert('Upload failed: ' + error.message + '\n\nCheck browser console (F12) for details');
     } finally {
@@ -152,7 +128,10 @@ export const HomePage = ({ user, onLogout }) => {
               <p className="text-sm text-gray-500">Welcome, {user.displayName || user.email}</p>
             </div>
           </div>
-          <button onClick={onLogout} className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
+          <button 
+            onClick={onLogout} 
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+          >
             <LogOut className="w-5 h-5" />
             <span className="hidden sm:inline">Logout</span>
           </button>
@@ -161,7 +140,11 @@ export const HomePage = ({ user, onLogout }) => {
       
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <button onClick={() => setShowCamera(true)} disabled={isProcessing} className="w-full sm:w-auto bg-indigo-600 text-white px-6 py-4 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg">
+          <button 
+            onClick={() => setShowCamera(true)} 
+            disabled={isProcessing} 
+            className="w-full sm:w-auto bg-indigo-600 text-white px-6 py-4 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+          >
             <Camera className="w-5 h-5" />
             Start New Room Scan
           </button>
@@ -173,15 +156,20 @@ export const HomePage = ({ user, onLogout }) => {
           )}
         </div>
 
-        <StatsCards projects={projects} />
+        <StatsCards groups={groups} />
 
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Your Room Scans</h2>
-          <ProjectsGrid projects={projects} />
+          <ProjectsGrid groups={groups} />
         </div>
       </main>
 
-      {showCamera && <CameraCapture onCapture={handleCapture} onClose={() => setShowCamera(false)} />}
+      {showCamera && (
+        <CameraCapture 
+          onCapture={handleCapture} 
+          onClose={() => setShowCamera(false)} 
+        />
+      )}
     </div>
   );
 };
