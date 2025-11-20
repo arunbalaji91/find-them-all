@@ -77,7 +77,7 @@ export const HomePage = ({ user, onLogout }) => {
           
           const { gcsPath, publicUrl } = await uploadToGCS(
             capturedImages[i].blob,
-            `projects/${docRef.id}/image_${i + 1}.jpg`,
+            `image_${i + 1}.jpg`,  // ← Simple name, not full path
             firebaseToken
           );
           
