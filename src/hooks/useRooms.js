@@ -78,6 +78,7 @@ export const useRooms = (userId) => {
             // Create chat for this room
             await addDoc(collection(db, 'chats'), {
                 roomId: docRef.id,
+                roomName: roomName,
                 hostId: userId,
                 participants: ['agent', 'host'],
                 unreadCount: 1,

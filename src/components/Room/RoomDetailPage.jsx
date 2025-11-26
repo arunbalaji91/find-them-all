@@ -25,7 +25,7 @@ export const RoomDetailPage = ({ user }) => {
   // Hooks
   const { photos, loading: photosLoading, uploading, uploadPhotos, deletePhoto } = useRoomPhotos(roomId, user?.uid);
   const { objects, loading: objectsLoading, updateLabel, toggleVerified } = useRoomObjects(roomId);
-  const { chats, messages, unreadTotal, activeChat, setActiveChat, sendMessage, markAsRead } = useAgentChat(user?.uid);
+  const { chats, messages, unreadTotal, activeChat, setActiveChat, sendMessage, markAsRead } = useAgentChat(user?.uid, roomId);
 
   // Subscribe to room data
   useEffect(() => {
@@ -207,6 +207,8 @@ export const RoomDetailPage = ({ user }) => {
         activeChat={activeChat}
         onSelectChat={setActiveChat}
         onMarkAsRead={markAsRead}
+        currentRoomId={roomId}
+        currentRoomName={room?.name}
       />
     </div>
   );

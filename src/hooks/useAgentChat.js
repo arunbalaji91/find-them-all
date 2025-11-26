@@ -10,10 +10,10 @@ import {
     updateDoc,
     doc,
     serverTimestamp,
-    writeBatch
+    getDocs
 } from 'firebase/firestore';
 
-export const useAgentChat = (userId) => {
+export const useAgentChat = (userId, currentRoomId = null) => {
     const [chats, setChats] = useState([]);
     const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -49,6 +49,15 @@ export const useAgentChat = (userId) => {
                 setChats(chatsData);
                 setUnreadTotal(totalUnread);
                 setLoading(false);
+
+                // Auto-select chat for current room if provided
+                if (currentRoomId && !activeChat) {
+                    const roomChat = chatsData.find(chat => chat.roomId === currentRoomId);
+                    if (roomChat) {
+                        console.log('🎯 Auto-selecting chat for current room:', currentRoomId);
+                        setActiveChat(roomChat.id);
+                    }
+                }
             },
             (err) => {
                 console.error('❌ Chats subscription error:', err);
@@ -57,7 +66,18 @@ export const useAgentChat = (userId) => {
         );
 
         return () => unsubscribe();
-    }, [userId]);
+    }, [userId, currentRoomId]);
+
+    // Auto-select when currentRoomId changes
+    useEffect(() => {
+        if (currentRoomId && chats.length > 0) {
+            const roomChat = chats.find(chat => chat.roomId === currentRoomId);
+            if (roomChat && activeChat !== roomChat.id) {
+                console.log('🎯 Switching to chat for room:', currentRoomId);
+                setActiveChat(roomChat.id);
+            }
+        }
+    }, [currentRoomId, chats]);
 
     // Subscribe to messages for active chat
     useEffect(() => {
@@ -124,6 +144,12 @@ export const useAgentChat = (userId) => {
         }
     };
 
+    // Get current room's chat info
+    const getCurrentRoomChat = () => {
+        if (!currentRoomId) return null;
+        return chats.find(chat => chat.roomId === currentRoomId);
+    };
+
     return {
         chats,
         messages,
@@ -132,6 +158,7 @@ export const useAgentChat = (userId) => {
         activeChat,
         setActiveChat,
         sendMessage,
-        markAsRead
+        markAsRead,
+        getCurrentRoomChat
     };
 };
