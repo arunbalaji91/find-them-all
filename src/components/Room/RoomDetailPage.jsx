@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Trash2, Tag, Loader, Camera } from 'lucide-react';
-import { doc, onSnapshot, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { PhotoGallery } from './PhotoGallery';
 import { PhotoUploader } from './PhotoUploader';
@@ -49,29 +49,25 @@ export const RoomDetailPage = ({ user }) => {
     return () => unsubscribe();
   }, [roomId, navigate]);
 
-  // Delete room handler
-  const handleDeleteRoom = async () => {
-    if (!confirm('Delete this room and all its photos? This cannot be undone.')) return;
+// Delete room handler - just update status, agent handles cleanup
+const handleDeleteRoom = async () => {
+  if (!confirm('Delete this room and all its data? This cannot be undone.')) return;
 
-    setDeleting(true);
-    try {
-      // Delete photos subcollection
-      const photosSnap = await getDocs(collection(db, 'rooms', roomId, 'photos'));
-      await Promise.all(photosSnap.docs.map(doc => deleteDoc(doc.ref)));
+  setDeleting(true);
+  try {
+    // Just update status - Agent will handle all cleanup
+    await updateDoc(doc(db, 'rooms', roomId), {
+      status: 'deleting',
+      updatedAt: serverTimestamp()
+    });
 
-      // Delete objects subcollection
-      const objectsSnap = await getDocs(collection(db, 'rooms', roomId, 'objects'));
-      await Promise.all(objectsSnap.docs.map(doc => deleteDoc(doc.ref)));
-
-      // Delete room document
-      await deleteDoc(doc(db, 'rooms', roomId));
-
-      navigate('/');
-    } catch (err) {
-      alert('Failed to delete room: ' + err.message);
-      setDeleting(false);
-    }
-  };
+    // Navigate away - agent will clean up in background
+    navigate('/');
+  } catch (err) {
+    alert('Failed to delete room: ' + err.message);
+    setDeleting(false);
+  }
+};
 
   // Status badge color
   const getStatusColor = (status) => {
