@@ -1,7 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Box, Upload, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 
 export const ProjectCard = ({ project }) => {
+  const navigate = useNavigate();
+
   // Backend group structure:
   // {
   //   id: "group_123",
@@ -14,6 +17,16 @@ export const ProjectCard = ({ project }) => {
   // }
 
   const statusConfig = {
+    created: {
+      color: 'bg-gray-100 text-gray-800',
+      icon: Box,
+      text: 'Created'
+    },
+    awaiting_photos: {
+      color: 'bg-gray-100 text-gray-800',
+      icon: Box,
+      text: 'Awaiting Photos'
+    },
     uploading: { 
       color: 'bg-blue-100 text-blue-800', 
       icon: Upload, 
@@ -24,10 +37,20 @@ export const ProjectCard = ({ project }) => {
       icon: Loader, 
       text: 'Processing' 
     },
+    review: {
+      color: 'bg-orange-100 text-orange-800',
+      icon: AlertCircle,
+      text: 'Review'
+    },
     completed: { 
       color: 'bg-green-100 text-green-800', 
       icon: CheckCircle, 
       text: 'Completed' 
+    },
+    complete: { 
+      color: 'bg-green-100 text-green-800', 
+      icon: CheckCircle, 
+      text: 'Complete' 
     },
     failed: { 
       color: 'bg-red-100 text-red-800', 
@@ -49,8 +72,15 @@ export const ProjectCard = ({ project }) => {
     }
   };
 
+  const handleClick = () => {
+    navigate(`/room/${project.id}`);
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
+    <div 
+      onClick={handleClick}
+      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+    >
       {/* THUMBNAIL */}
       <div className="aspect-video bg-gray-200 relative">
         {project.thumbnail ? (
@@ -89,7 +119,7 @@ export const ProjectCard = ({ project }) => {
         </p>
         
         {/* DETECTION COUNT (if completed) */}
-        {project.status === 'completed' && project.detectionCount && (
+        {(project.status === 'completed' || project.status === 'complete') && project.detectionCount > 0 && (
           <p className="text-sm text-indigo-600 mt-2">
             {project.detectionCount} objects detected
           </p>
@@ -100,6 +130,14 @@ export const ProjectCard = ({ project }) => {
           <p className="text-sm text-yellow-600 mt-2 flex items-center gap-1">
             <Loader className="w-3 h-3 animate-spin" />
             Processing...
+          </p>
+        )}
+
+        {/* REVIEW STATE */}
+        {project.status === 'review' && (
+          <p className="text-sm text-orange-600 mt-2 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            Needs review
           </p>
         )}
 
