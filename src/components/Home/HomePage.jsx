@@ -1,111 +1,65 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, LogOut, Box, Loader } from 'lucide-react';
+import React, { useState } from 'react';
+import { Camera, LogOut, Box, Loader, Plus } from 'lucide-react';
 import { CameraCapture } from '../Camera/CameraCapture';
 import { StatsCards } from './StatsCards';
 import { ProjectsGrid } from './ProjectsGrid';
-import { uploadToGCS, listGroups } from '../../utils/uploadToGCS';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { AgentChatButton } from '../Agent/AgentChatButton';
+import { AgentChatPanel } from '../Agent/AgentChatPanel';
+import { useRooms } from '../../hooks/useRooms';
+import { useAgentChat } from '../../hooks/useAgentChat';
 
 export const HomePage = ({ user, onLogout }) => {
   const [showCamera, setShowCamera] = useState(false);
-  const [groups, setGroups] = useState([]);
+  const [showNewRoomModal, setShowNewRoomModal] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [showChat, setShowChat] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [uploadProgress, setUploadProgress] = useState('');
 
-  useEffect(() => {
-    if (user) {
-      loadGroups();
-    }
-  }, [user]);
+  // Firestore hooks
+  const { rooms, loading, createRoom } = useRooms(user?.uid);
+  const { 
+    chats, 
+    messages, 
+    unreadTotal, 
+    activeChat, 
+    setActiveChat, 
+    sendMessage, 
+    markAsRead 
+  } = useAgentChat(user?.uid);
 
-  /**
-   * Load all groups for current user from backend
-   * Session cookie is automatically included via credentials: 'include'
-   */
-  const loadGroups = async () => {
+  const handleCreateRoom = async () => {
+    if (!newRoomName.trim()) return;
+    
     try {
-      console.log('📋 Loading groups from backend...');
-      const data = await listGroups(20, 0);
-      setGroups(data.groups || []);
-      console.log('✅ Groups loaded:', data.groups?.length || 0);
+      setIsProcessing(true);
+      await createRoom(newRoomName.trim());
+      setNewRoomName('');
+      setShowNewRoomModal(false);
+      // Open chat to show agent welcome message
+      setShowChat(true);
     } catch (error) {
-      console.error('❌ Error loading groups:', error);
-      setGroups([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
-   * Handle captured images from camera
-   * Upload to backend which handles: validation, group creation, ML processing
-   */
-  const handleCapture = async (capturedImages) => {
-    setShowCamera(false);
-    setIsProcessing(true);
-    setUploadProgress('Starting upload...');
-
-    console.log('📸 Starting upload process for', capturedImages.length, 'images');
-
-    try {
-      // Create group name from timestamp
-      const groupName = `Room Scan ${new Date().toLocaleString()}`;
-      console.log('📁 Group name:', groupName);
-
-      const uploadedCount = capturedImages.length;
-      let uploadedImages = [];
-
-      // Upload each image to backend
-      for (let i = 0; i < capturedImages.length; i++) {
-        try {
-          console.log(`\n📤 Uploading image ${i + 1}/${capturedImages.length}...`);
-          setUploadProgress(`Uploading image ${i + 1}/${capturedImages.length}...`);
-          
-          // Call uploadToGCS with NEW signature (no firebaseToken)
-          const result = await uploadToGCS(
-            capturedImages[i].blob,
-            `image_${i + 1}.jpg`,
-            groupName  // ✅ Pass groupName instead of firebaseToken
-          );
-          
-          console.log(`✅ Image ${i + 1} uploaded successfully`);
-          console.log('   - Group ID:', result.groupId);
-          
-          uploadedImages.push({
-            index: i + 1,
-            groupId: result.groupId,
-            gcsPath: result.gcsPath,
-            publicUrl: result.publicUrl
-          });
-
-        } catch (imageError) {
-          console.error(`❌ Failed to upload image ${i + 1}:`, imageError);
-          setUploadProgress(`Error uploading image ${i + 1}: ${imageError.message}`);
-          throw imageError;
-        }
-      }
-      
-      console.log(`\n✅ All ${uploadedCount} images uploaded!`);
-      setUploadProgress('Upload complete! Processing with ML...');
-      
-      // Reload groups from backend
-      console.log('🔄 Reloading groups...');
-      await loadGroups();
-      
-      console.log('🎉 All done!');
-      setUploadProgress('');
-
-    } catch (error) {
-      console.error('❌ Upload Process Error:', error);
-      console.error('Error message:', error.message);
-      setUploadProgress(`❌ Error: ${error.message}`);
-      alert('Upload failed: ' + error.message + '\n\nCheck browser console (F12) for details');
+      alert('Failed to create room: ' + error.message);
     } finally {
       setIsProcessing(false);
     }
   };
+
+  const handleCapture = async (capturedImages) => {
+    setShowCamera(false);
+    // TODO: Implement GCS upload with signed URLs
+    console.log('Captured images:', capturedImages.length);
+    alert('Photo upload coming soon! Images captured: ' + capturedImages.length);
+  };
+
+  // Convert rooms to format expected by ProjectsGrid
+  const groups = rooms.map(room => ({
+    id: room.id,
+    name: room.name,
+    status: room.status === 'complete' ? 'completed' : room.status,
+    imageCount: room.photosCount || 0,
+    detectionCount: room.objectsCount || 0,
+    createdAt: room.createdAt?.toDate?.()?.toISOString() || new Date().toISOString()
+  }));
 
   if (loading) {
     return (
@@ -117,6 +71,7 @@ export const HomePage = ({ user, onLogout }) => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -128,8 +83,8 @@ export const HomePage = ({ user, onLogout }) => {
               <p className="text-sm text-gray-500">Welcome, {user.displayName || user.email}</p>
             </div>
           </div>
-          <button 
-            onClick={onLogout} 
+          <button
+            onClick={onLogout}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
           >
             <LogOut className="w-5 h-5" />
@@ -137,39 +92,97 @@ export const HomePage = ({ user, onLogout }) => {
           </button>
         </div>
       </header>
-      
+
+      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <button 
-            onClick={() => setShowCamera(true)} 
-            disabled={isProcessing} 
-            className="w-full sm:w-auto bg-indigo-600 text-white px-6 py-4 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+        {/* Action Buttons */}
+        <div className="mb-8 flex gap-4 flex-wrap">
+          <button
+            onClick={() => setShowNewRoomModal(true)}
+            className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 flex items-center gap-2 shadow-lg"
           >
-            <Camera className="w-5 h-5" />
-            Start New Room Scan
+            <Plus className="w-5 h-5" />
+            New Room
           </button>
-          {uploadProgress && (
-            <p className="mt-2 text-sm text-gray-600 flex items-center gap-2">
-              <Loader className="w-4 h-4 animate-spin" />
-              {uploadProgress}
-            </p>
+          
+          {rooms.length > 0 && (
+            <button
+              onClick={() => setShowCamera(true)}
+              disabled={isProcessing}
+              className="bg-white text-indigo-600 border-2 border-indigo-600 px-6 py-3 rounded-lg font-medium hover:bg-indigo-50 flex items-center gap-2"
+            >
+              <Camera className="w-5 h-5" />
+              Upload Photos
+            </button>
           )}
         </div>
 
+        {/* Stats */}
         <StatsCards groups={groups} />
 
+        {/* Rooms Grid */}
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Your Room Scans</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Your Rooms</h2>
           <ProjectsGrid groups={groups} />
         </div>
       </main>
 
+      {/* New Room Modal */}
+      {showNewRoomModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold mb-4">Create New Room</h3>
+            <input
+              type="text"
+              value={newRoomName}
+              onChange={(e) => setNewRoomName(e.target.value)}
+              placeholder="Room name (e.g., Master Bedroom)"
+              className="w-full px-4 py-2 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              autoFocus
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowNewRoomModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-900"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateRoom}
+                disabled={!newRoomName.trim() || isProcessing}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {isProcessing ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Camera */}
       {showCamera && (
-        <CameraCapture 
-          onCapture={handleCapture} 
-          onClose={() => setShowCamera(false)} 
+        <CameraCapture
+          onCapture={handleCapture}
+          onClose={() => setShowCamera(false)}
         />
       )}
+
+      {/* Agent Chat */}
+      <AgentChatButton
+        unreadCount={unreadTotal}
+        onClick={() => setShowChat(true)}
+      />
+      
+      <AgentChatPanel
+        isOpen={showChat}
+        onClose={() => setShowChat(false)}
+        messages={messages}
+        onSendMessage={sendMessage}
+        chats={chats}
+        activeChat={activeChat}
+        onSelectChat={setActiveChat}
+        onMarkAsRead={markAsRead}
+      />
     </div>
   );
 };
