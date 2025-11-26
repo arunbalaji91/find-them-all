@@ -7,7 +7,7 @@ import { RoomDetailPage } from './components/Room/RoomDetailPage';
 import './App.css';
 
 function App() {
-  const { user, loading, login, logout } = useAuth();
+  const { user, loading, loginWithGoogle, loginWithMicrosoft, logout } = useAuth();
 
   if (loading) {
     return (
@@ -21,7 +21,15 @@ function App() {
     <BrowserRouter>
       <Routes>
         {!user ? (
-          <Route path="*" element={<LoginPage onLogin={login} />} />
+          <Route 
+            path="*" 
+            element={
+              <LoginPage 
+                onGoogleLogin={loginWithGoogle} 
+                onMicrosoftLogin={loginWithMicrosoft} 
+              />
+            } 
+          />
         ) : (
           <>
             <Route path="/" element={<HomePage user={user} onLogout={logout} />} />
