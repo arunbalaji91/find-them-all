@@ -2,10 +2,11 @@
 ├── dist
 │   ├── assets
 │   │   ├── index-BZCUPlf_.css
-│   │   └── index-DS1vH0sZ.js
+│   │   └── index-C6PGOP7G.js
 │   ├── index.html
 │   └── vite.svg
 ├── eslint.config.js
+├── FrontEnd-project-structure.txt
 ├── index.html
 ├── node_modules
 │   ├── @alloc
@@ -20288,7 +20289,6 @@
 ├── package-lock.json
 ├── package.json
 ├── postcss.config.js
-├── project-structure.txt
 ├── public
 │   └── vite.svg
 ├── README.md
