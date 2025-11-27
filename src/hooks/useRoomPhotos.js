@@ -6,17 +6,14 @@ import {
     orderBy,
     onSnapshot,
     addDoc,
+    updateDoc,
     deleteDoc,
     doc,
-    updateDoc,
-    increment,
     serverTimestamp
 } from 'firebase/firestore';
-import { getBatchSignedUrls, uploadToGCS, buildPhotoPath } from '../utils/gcsUpload';
 
-export const useRoomPhotos = (roomId, hostId) => {
+export const useRoomPhotos = (roomId) => {
     const [photos, setPhotos] = useState([]);
-    const [photosWithUrls, setPhotosWithUrls] = useState([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState(null);
@@ -31,7 +28,7 @@ export const useRoomPhotos = (roomId, hostId) => {
         console.log('📷 Subscribing to photos for room:', roomId);
 
         const photosRef = collection(db, 'rooms', roomId, 'photos');
-        const q = query(photosRef, orderBy('uploadedAt', 'desc'));
+        const q = query(photosRef, orderBy('createdAt', 'desc'));
 
         const unsubscribe = onSnapshot(q,
             (snapshot) => {
@@ -53,76 +50,87 @@ export const useRoomPhotos = (roomId, hostId) => {
         return () => unsubscribe();
     }, [roomId]);
 
-    // Fetch signed URLs when photos change
-    useEffect(() => {
-        const fetchSignedUrls = async () => {
-            if (photos.length === 0) {
-                setPhotosWithUrls([]);
-                return;
-            }
+    // Request photo upload - Agent will provide signed URL
+    const requestPhotoUpload = async (file) => {
+        try {
+            console.log('📤 Requesting upload for:', file.name);
 
-            try {
-                const filePaths = photos.map(p => p.gcsPath);
-                const urls = await getBatchSignedUrls(filePaths);
+            // Write photo metadata with status 'pending'
+            // Agent will detect this and generate signed URL
+            const photoRef = await addDoc(collection(db, 'rooms', roomId, 'photos'), {
+                filename: file.name,
+                size: file.size,
+                contentType: file.type || 'image/jpeg',
+                status: 'pending',  // Agent watches for this
+                createdAt: serverTimestamp()
+            });
 
-                const photosWithSignedUrls = photos.map(photo => {
-                    const urlData = urls.find(u => u.filePath === photo.gcsPath);
-                    return {
-                        ...photo,
-                        signedUrl: urlData?.signedUrl || null
-                    };
-                });
-
-                setPhotosWithUrls(photosWithSignedUrls);
-            } catch (err) {
-                console.error('❌ Error fetching signed URLs:', err);
-                setError(err.message);
-            }
-        };
-
-        fetchSignedUrls();
-    }, [photos]);
-
-    // Upload photos
-    const uploadPhotos = async (files) => {
-        if (!roomId || !hostId) {
-            throw new Error('Room ID and Host ID required');
+            console.log('✅ Photo request created:', photoRef.id);
+            return { photoId: photoRef.id, file };
+        } catch (err) {
+            console.error('❌ Error requesting upload:', err);
+            throw err;
         }
+    };
 
+    // Upload file using signed URL from Agent
+    const uploadWithSignedUrl = async (photoId, file, signedUrl) => {
+        try {
+            console.log('📤 Uploading to GCS:', file.name);
+
+            const response = await fetch(signedUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': file.type || 'image/jpeg' },
+                body: file
+            });
+
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${response.statusText}`);
+            }
+
+            // Update photo status to uploaded
+            await updateDoc(doc(db, 'rooms', roomId, 'photos', photoId), {
+                status: 'uploaded',
+                uploadedAt: serverTimestamp()
+            });
+
+            console.log('✅ Photo uploaded successfully');
+            return true;
+        } catch (err) {
+            console.error('❌ Upload error:', err);
+
+            // Mark as failed
+            await updateDoc(doc(db, 'rooms', roomId, 'photos', photoId), {
+                status: 'failed',
+                error: err.message
+            });
+
+            throw err;
+        }
+    };
+
+    // Upload multiple photos
+    const uploadPhotos = async (files) => {
         setUploading(true);
         setError(null);
 
         try {
-            const uploadPromises = Array.from(files).map(async (file) => {
-                const filename = `${Date.now()}_${file.name}`;
-                const gcsPath = buildPhotoPath(hostId, roomId, filename);
+            const fileArray = Array.from(files);
+            console.log('📤 Uploading', fileArray.length, 'photos');
 
-                // Upload to GCS
-                await uploadToGCS(file, gcsPath);
+            // Step 1: Create pending photo documents
+            const pendingPhotos = await Promise.all(
+                fileArray.map(file => requestPhotoUpload(file))
+            );
 
-                // Add metadata to Firestore
-                const photoDoc = await addDoc(collection(db, 'rooms', roomId, 'photos'), {
-                    filename,
-                    gcsPath,
-                    uploadedAt: serverTimestamp(),
-                    size: file.size
-                });
+            // Step 2: Wait for Agent to provide signed URLs and upload
+            // For now, we'll poll for signed URLs
+            for (const { photoId, file } of pendingPhotos) {
+                await waitForSignedUrlAndUpload(photoId, file);
+            }
 
-                return photoDoc.id;
-            });
-
-            const uploadedIds = await Promise.all(uploadPromises);
-
-            // Update room photo count
-            await updateDoc(doc(db, 'rooms', roomId), {
-                photosCount: increment(uploadedIds.length),
-                updatedAt: serverTimestamp(),
-                status: 'uploading'
-            });
-
-            console.log('✅ Uploaded photos:', uploadedIds.length);
-            return uploadedIds;
-
+            console.log('✅ All photos uploaded');
+            return true;
         } catch (err) {
             console.error('❌ Upload error:', err);
             setError(err.message);
@@ -132,25 +140,57 @@ export const useRoomPhotos = (roomId, hostId) => {
         }
     };
 
-    // Delete photo
-    const deletePhoto = async (photoId, gcsPath) => {
-        try {
-            await deleteDoc(doc(db, 'rooms', roomId, 'photos', photoId));
+    // Wait for Agent to provide signed URL, then upload
+    const waitForSignedUrlAndUpload = (photoId, file) => {
+        return new Promise((resolve, reject) => {
+            const photoRef = doc(db, 'rooms', roomId, 'photos', photoId);
+            const timeout = setTimeout(() => {
+                unsubscribe();
+                reject(new Error('Timeout waiting for signed URL'));
+            }, 30000); // 30 second timeout
 
-            await updateDoc(doc(db, 'rooms', roomId), {
-                photosCount: increment(-1),
-                updatedAt: serverTimestamp()
+            const unsubscribe = onSnapshot(photoRef, async (snapshot) => {
+                const data = snapshot.data();
+
+                if (data?.signedUrl && data?.status === 'ready_to_upload') {
+                    clearTimeout(timeout);
+                    unsubscribe();
+
+                    try {
+                        await uploadWithSignedUrl(photoId, file, data.signedUrl);
+                        resolve(true);
+                    } catch (err) {
+                        reject(err);
+                    }
+                } else if (data?.status === 'failed') {
+                    clearTimeout(timeout);
+                    unsubscribe();
+                    reject(new Error(data.error || 'Failed to get signed URL'));
+                }
             });
+        });
+    };
 
-            console.log('✅ Photo deleted:', photoId);
+    // Delete photo
+    const deletePhoto = async (photoId) => {
+        try {
+            console.log('🗑️ Deleting photo:', photoId);
+            await deleteDoc(doc(db, 'rooms', roomId, 'photos', photoId));
+            console.log('✅ Photo deleted');
         } catch (err) {
             console.error('❌ Delete error:', err);
             throw err;
         }
     };
 
+    // Get photos that are ready to display (uploaded or have signed download URL)
+    const displayablePhotos = photos.filter(p =>
+        p.status === 'uploaded' || p.downloadUrl
+    );
+
     return {
-        photos: photosWithUrls,
+        photos,
+        displayablePhotos,
         loading,
         uploading,
         error,

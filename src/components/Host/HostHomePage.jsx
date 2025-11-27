@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Camera, LogOut, Box, Loader, Plus } from 'lucide-react';
-import { CameraCapture } from '../Camera/CameraCapture';
+import { Box, LogOut, Plus, Loader } from 'lucide-react';
 import { StatsCards } from './StatsCards';
 import { ProjectsGrid } from './ProjectsGrid';
 import { AgentChatButton } from '../Agent/AgentChatButton';
@@ -8,12 +7,11 @@ import { AgentChatPanel } from '../Agent/AgentChatPanel';
 import { useRooms } from '../../hooks/useRooms';
 import { useAgentChat } from '../../hooks/useAgentChat';
 
-export const HomePage = ({ user, onLogout }) => {
-  const [showCamera, setShowCamera] = useState(false);
+export const HostHomePage = ({ user, onLogout }) => {
   const [showNewRoomModal, setShowNewRoomModal] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [showChat, setShowChat] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   // Firestore hooks
   const { rooms, loading, createRoom } = useRooms(user?.uid);
@@ -31,31 +29,22 @@ export const HomePage = ({ user, onLogout }) => {
     if (!newRoomName.trim()) return;
     
     try {
-      setIsProcessing(true);
+      setIsCreating(true);
       await createRoom(newRoomName.trim());
       setNewRoomName('');
       setShowNewRoomModal(false);
-      // Open chat to show agent welcome message
-      setShowChat(true);
     } catch (error) {
       alert('Failed to create room: ' + error.message);
     } finally {
-      setIsProcessing(false);
+      setIsCreating(false);
     }
-  };
-
-  const handleCapture = async (capturedImages) => {
-    setShowCamera(false);
-    // TODO: Implement GCS upload with signed URLs
-    console.log('Captured images:', capturedImages.length);
-    alert('Photo upload coming soon! Images captured: ' + capturedImages.length);
   };
 
   // Convert rooms to format expected by ProjectsGrid
   const groups = rooms.map(room => ({
     id: room.id,
     name: room.name,
-    status: room.status === 'complete' ? 'completed' : room.status,
+    status: room.status,
     imageCount: room.photosCount || 0,
     detectionCount: room.objectsCount || 0,
     createdAt: room.createdAt?.toDate?.()?.toISOString() || new Date().toISOString()
@@ -80,7 +69,7 @@ export const HomePage = ({ user, onLogout }) => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Find Them All</h1>
-              <p className="text-sm text-gray-500">Welcome, {user.displayName || user.email}</p>
+              <p className="text-sm text-gray-500">Host: {user.displayName || user.email}</p>
             </div>
           </div>
           <button
@@ -96,7 +85,7 @@ export const HomePage = ({ user, onLogout }) => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* Action Buttons */}
-        <div className="mb-8 flex gap-4 flex-wrap">
+        <div className="mb-8">
           <button
             onClick={() => setShowNewRoomModal(true)}
             className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 flex items-center gap-2 shadow-lg"
@@ -104,17 +93,6 @@ export const HomePage = ({ user, onLogout }) => {
             <Plus className="w-5 h-5" />
             New Room
           </button>
-          
-          {rooms.length > 0 && (
-            <button
-              onClick={() => setShowCamera(true)}
-              disabled={isProcessing}
-              className="bg-white text-indigo-600 border-2 border-indigo-600 px-6 py-3 rounded-lg font-medium hover:bg-indigo-50 flex items-center gap-2"
-            >
-              <Camera className="w-5 h-5" />
-              Upload Photos
-            </button>
-          )}
         </div>
 
         {/* Stats */}
@@ -139,6 +117,7 @@ export const HomePage = ({ user, onLogout }) => {
               placeholder="Room name (e.g., Master Bedroom)"
               className="w-full px-4 py-2 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               autoFocus
+              onKeyPress={(e) => e.key === 'Enter' && handleCreateRoom()}
             />
             <div className="flex gap-3 justify-end">
               <button
@@ -149,22 +128,15 @@ export const HomePage = ({ user, onLogout }) => {
               </button>
               <button
                 onClick={handleCreateRoom}
-                disabled={!newRoomName.trim() || isProcessing}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                disabled={!newRoomName.trim() || isCreating}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
               >
-                {isProcessing ? 'Creating...' : 'Create'}
+                {isCreating && <Loader className="w-4 h-4 animate-spin" />}
+                {isCreating ? 'Creating...' : 'Create'}
               </button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Camera */}
-      {showCamera && (
-        <CameraCapture
-          onCapture={handleCapture}
-          onClose={() => setShowCamera(false)}
-        />
       )}
 
       {/* Agent Chat */}
