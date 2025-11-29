@@ -7,16 +7,18 @@ import {
     onSnapshot,
     addDoc,
     updateDoc,
-    deleteDoc,
     doc,
-    serverTimestamp
+    serverTimestamp,
+    where
 } from 'firebase/firestore';
 
-export const useRoomPhotos = (roomId) => {
+export const useRoomPhotos = (roomId, hostId) => {
     const [photos, setPhotos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     const [error, setError] = useState(null);
+    const [activeBatch, setActiveBatch] = useState(null);
 
     // Subscribe to photos collection
     useEffect(() => {
@@ -24,8 +26,6 @@ export const useRoomPhotos = (roomId) => {
             setLoading(false);
             return;
         }
-
-        console.log('📷 Subscribing to photos for room:', roomId);
 
         const photosRef = collection(db, 'rooms', roomId, 'photos');
         const q = query(photosRef, orderBy('createdAt', 'desc'));
@@ -36,12 +36,11 @@ export const useRoomPhotos = (roomId) => {
                     id: doc.id,
                     ...doc.data()
                 }));
-                console.log('✅ Photos updated:', photosData.length);
                 setPhotos(photosData);
                 setLoading(false);
             },
             (err) => {
-                console.error('❌ Photos subscription error:', err);
+                console.error('Photos subscription error:', err);
                 setError(err.message);
                 setLoading(false);
             }
@@ -50,151 +49,235 @@ export const useRoomPhotos = (roomId) => {
         return () => unsubscribe();
     }, [roomId]);
 
-    // Request photo upload - Agent will provide signed URL
-    const requestPhotoUpload = async (file) => {
-        try {
-            console.log('📤 Requesting upload for:', file.name);
+    // Subscribe to active upload batch
+    useEffect(() => {
+        if (!roomId) return;
 
-            // Write photo metadata with status 'pending'
-            // Agent will detect this and generate signed URL
-            const photoRef = await addDoc(collection(db, 'rooms', roomId, 'photos'), {
-                filename: file.name,
-                size: file.size,
-                contentType: file.type || 'image/jpeg',
-                status: 'pending',  // Agent watches for this
-                createdAt: serverTimestamp()
-            });
+        const batchesRef = collection(db, 'rooms', roomId, 'uploadBatches');
+        const q = query(batchesRef, where('status', 'in', ['pending', 'ready_to_upload', 'uploading']));
 
-            console.log('✅ Photo request created:', photoRef.id);
-            return { photoId: photoRef.id, file };
-        } catch (err) {
-            console.error('❌ Error requesting upload:', err);
-            throw err;
-        }
-    };
-
-    // Upload file using signed URL from Agent
-    const uploadWithSignedUrl = async (photoId, file, signedUrl) => {
-        try {
-            console.log('📤 Uploading to GCS:', file.name);
-
-            const response = await fetch(signedUrl, {
-                method: 'PUT',
-                headers: { 'Content-Type': file.type || 'image/jpeg' },
-                body: file
-            });
-
-            if (!response.ok) {
-                throw new Error(`Upload failed: ${response.statusText}`);
+        const unsubscribe = onSnapshot(q, async (snapshot) => {
+            if (snapshot.empty) {
+                setActiveBatch(null);
+                setUploading(false);
+                return;
             }
 
-            // Update photo status to uploaded
-            await updateDoc(doc(db, 'rooms', roomId, 'photos', photoId), {
+            const batch = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+            setActiveBatch(batch);
+
+            // If batch is ready_to_upload, upload files to GCS
+            if (batch.status === 'ready_to_upload' && batch.photos) {
+                setUploading(true);
+                await uploadFilesToGCS(batch);
+            }
+        });
+
+        return () => unsubscribe();
+    }, [roomId]);
+
+    // Upload files to GCS using signed URLs
+    const uploadFilesToGCS = async (batch) => {
+        const files = batch._localFiles; // Files stored temporarily
+        if (!files || files.length === 0) {
+            console.log('No local files to upload');
+            return;
+        }
+
+        try {
+            console.log('Uploading files to GCS...');
+
+            // Upload each file
+            const uploadPromises = batch.photos.map(async (photo, index) => {
+                const file = files.find(f => f.name === photo.filename);
+                if (!file || !photo.signedUrl) return;
+
+                const response = await fetch(photo.signedUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': file.type || 'image/jpeg' },
+                    body: file
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to upload ${photo.filename}`);
+                }
+            });
+
+            await Promise.all(uploadPromises);
+
+            // Mark batch as uploaded
+            await updateDoc(doc(db, 'rooms', roomId, 'uploadBatches', batch.id), {
                 status: 'uploaded',
                 uploadedAt: serverTimestamp()
             });
 
-            console.log('✅ Photo uploaded successfully');
-            return true;
-        } catch (err) {
-            console.error('❌ Upload error:', err);
+            console.log('All files uploaded successfully');
 
-            // Mark as failed
-            await updateDoc(doc(db, 'rooms', roomId, 'photos', photoId), {
+        } catch (err) {
+            console.error('Upload error:', err);
+            setError(err.message);
+
+            await updateDoc(doc(db, 'rooms', roomId, 'uploadBatches', batch.id), {
                 status: 'failed',
                 error: err.message
             });
-
-            throw err;
         }
     };
 
-    // Upload multiple photos
+    // Create upload batch
     const uploadPhotos = async (files) => {
+        if (!roomId || !hostId) throw new Error('Missing roomId or hostId');
+
         setUploading(true);
         setError(null);
 
         try {
             const fileArray = Array.from(files);
-            console.log('📤 Uploading', fileArray.length, 'photos');
+            console.log(`Creating upload batch for ${fileArray.length} files`);
 
-            // Step 1: Create pending photo documents
-            const pendingPhotos = await Promise.all(
-                fileArray.map(file => requestPhotoUpload(file))
+            // Create batch document
+            const batchData = {
+                status: 'pending',
+                hostId,
+                photos: fileArray.map(f => ({
+                    filename: f.name,
+                    size: f.size,
+                    contentType: f.type || 'image/jpeg'
+                })),
+                totalCount: fileArray.length,
+                createdAt: serverTimestamp()
+            };
+
+            const batchRef = await addDoc(
+                collection(db, 'rooms', roomId, 'uploadBatches'),
+                batchData
             );
 
-            // Step 2: Wait for Agent to provide signed URLs and upload
-            // For now, we'll poll for signed URLs
-            for (const { photoId, file } of pendingPhotos) {
-                await waitForSignedUrlAndUpload(photoId, file);
-            }
+            // Store files locally for upload when signed URLs arrive
+            // We need to store them somewhere accessible
+            window._pendingUploadFiles = window._pendingUploadFiles || {};
+            window._pendingUploadFiles[batchRef.id] = fileArray;
 
-            console.log('✅ All photos uploaded');
-            return true;
+            console.log('Upload batch created:', batchRef.id);
+
+            // Set up listener for this specific batch
+            const unsubscribe = onSnapshot(
+                doc(db, 'rooms', roomId, 'uploadBatches', batchRef.id),
+                async (snapshot) => {
+                    const batch = snapshot.data();
+                    if (!batch) return;
+
+                    if (batch.status === 'ready_to_upload' && batch.photos) {
+                        const files = window._pendingUploadFiles[batchRef.id];
+                        if (files) {
+                            try {
+                                // Upload each file
+                                for (const photo of batch.photos) {
+                                    const file = files.find(f => f.name === photo.filename);
+                                    if (!file || !photo.signedUrl) continue;
+
+                                    const response = await fetch(photo.signedUrl, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': file.type || 'image/jpeg' },
+                                        body: file
+                                    });
+
+                                    if (!response.ok) {
+                                        throw new Error(`Failed to upload ${photo.filename}`);
+                                    }
+                                }
+
+                                // Mark as uploaded
+                                await updateDoc(snapshot.ref, {
+                                    status: 'uploaded',
+                                    uploadedAt: serverTimestamp()
+                                });
+
+                                // Cleanup
+                                delete window._pendingUploadFiles[batchRef.id];
+                                unsubscribe();
+                                setUploading(false);
+
+                            } catch (err) {
+                                console.error('Upload error:', err);
+                                await updateDoc(snapshot.ref, {
+                                    status: 'failed',
+                                    error: err.message
+                                });
+                                setError(err.message);
+                                setUploading(false);
+                            }
+                        }
+                    } else if (batch.status === 'uploaded' || batch.status === 'failed') {
+                        unsubscribe();
+                        setUploading(false);
+                    }
+                }
+            );
+
+            return batchRef.id;
+
         } catch (err) {
-            console.error('❌ Upload error:', err);
+            console.error('Error creating upload batch:', err);
+            setError(err.message);
+            setUploading(false);
+            throw err;
+        }
+    };
+
+    // Create delete batch
+    const deletePhotos = async (photoIds) => {
+        if (!roomId || photoIds.length === 0) return;
+
+        setDeleting(true);
+        setError(null);
+
+        try {
+            // Get photo data for the batch
+            const photosToDelete = photos.filter(p => photoIds.includes(p.id));
+
+            const batchData = {
+                status: 'pending',
+                photos: photosToDelete.map(p => ({
+                    photoId: p.id,
+                    filename: p.filename,
+                    gcsPath: p.gcsPath
+                })),
+                totalCount: photosToDelete.length,
+                createdAt: serverTimestamp()
+            };
+
+            await addDoc(
+                collection(db, 'rooms', roomId, 'deleteBatches'),
+                batchData
+            );
+
+            console.log('Delete batch created for', photoIds.length, 'photos');
+
+            // The agent will handle the actual deletion
+            // Photos will disappear from the subscription when deleted
+
+        } catch (err) {
+            console.error('Error creating delete batch:', err);
             setError(err.message);
             throw err;
         } finally {
-            setUploading(false);
+            setDeleting(false);
         }
     };
 
-    // Wait for Agent to provide signed URL, then upload
-    const waitForSignedUrlAndUpload = (photoId, file) => {
-        return new Promise((resolve, reject) => {
-            const photoRef = doc(db, 'rooms', roomId, 'photos', photoId);
-            const timeout = setTimeout(() => {
-                unsubscribe();
-                reject(new Error('Timeout waiting for signed URL'));
-            }, 30000); // 30 second timeout
-
-            const unsubscribe = onSnapshot(photoRef, async (snapshot) => {
-                const data = snapshot.data();
-
-                if (data?.signedUrl && data?.status === 'ready_to_upload') {
-                    clearTimeout(timeout);
-                    unsubscribe();
-
-                    try {
-                        await uploadWithSignedUrl(photoId, file, data.signedUrl);
-                        resolve(true);
-                    } catch (err) {
-                        reject(err);
-                    }
-                } else if (data?.status === 'failed') {
-                    clearTimeout(timeout);
-                    unsubscribe();
-                    reject(new Error(data.error || 'Failed to get signed URL'));
-                }
-            });
-        });
-    };
-
-    // Delete photo
-    const deletePhoto = async (photoId) => {
-        try {
-            console.log('🗑️ Deleting photo:', photoId);
-            await deleteDoc(doc(db, 'rooms', roomId, 'photos', photoId));
-            console.log('✅ Photo deleted');
-        } catch (err) {
-            console.error('❌ Delete error:', err);
-            throw err;
-        }
-    };
-
-    // Get photos that are ready to display (uploaded or have signed download URL)
-    const displayablePhotos = photos.filter(p =>
-        p.status === 'uploaded' || p.downloadUrl
-    );
+    // Get active photos (not pending delete)
+    const activePhotos = photos.filter(p => p.status !== 'pending_delete');
 
     return {
-        photos,
-        displayablePhotos,
+        photos: activePhotos,
+        allPhotos: photos,
         loading,
         uploading,
+        deleting,
         error,
+        activeBatch,
         uploadPhotos,
-        deletePhoto
+        deletePhotos
     };
 };
