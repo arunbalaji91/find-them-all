@@ -1,11 +1,12 @@
 .
 ├── dist
 │   ├── assets
-│   │   ├── index-BZCUPlf_.css
-│   │   └── index-C6PGOP7G.js
+│   │   ├── index-BFoWRy45.css
+│   │   └── index-oGQG6Rln.js
 │   ├── index.html
 │   └── vite.svg
 ├── eslint.config.js
+├── find-them-all_-project-structure.txt
 ├── FrontEnd-project-structure.txt
 ├── index.html
 ├── node_modules
@@ -8315,6 +8316,14 @@
 │   │       └── map.js
 │   ├── convert-source-map
 │   │   ├── index.js
+│   │   ├── LICENSE
+│   │   ├── package.json
+│   │   └── README.md
+│   ├── cookie
+│   │   ├── dist
+│   │   │   ├── index.d.ts
+│   │   │   ├── index.js
+│   │   │   └── index.js.map
 │   │   ├── LICENSE
 │   │   ├── package.json
 │   │   └── README.md
@@ -18766,6 +18775,93 @@
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   └── runtime.js
+│   ├── react-router
+│   │   ├── CHANGELOG.md
+│   │   ├── dist
+│   │   │   ├── development
+│   │   │   │   ├── browser-BbBXFHbO.d.ts
+│   │   │   │   ├── browser-C07r42Tt.d.mts
+│   │   │   │   ├── chunk-4WY6JWTD.mjs
+│   │   │   │   ├── chunk-AMVS5XVJ.js
+│   │   │   │   ├── chunk-G3INQAYP.mjs
+│   │   │   │   ├── chunk-O4JVZSOY.js
+│   │   │   │   ├── chunk-PZWDWJAY.js
+│   │   │   │   ├── dom-export.d.mts
+│   │   │   │   ├── dom-export.d.ts
+│   │   │   │   ├── dom-export.js
+│   │   │   │   ├── dom-export.mjs
+│   │   │   │   ├── index-react-server-client-Da3kmxNd.d.ts
+│   │   │   │   ├── index-react-server-client-rcoGPJhU.d.mts
+│   │   │   │   ├── index-react-server-client.d.mts
+│   │   │   │   ├── index-react-server-client.d.ts
+│   │   │   │   ├── index-react-server-client.js
+│   │   │   │   ├── index-react-server-client.mjs
+│   │   │   │   ├── index-react-server.d.mts
+│   │   │   │   ├── index-react-server.d.ts
+│   │   │   │   ├── index-react-server.js
+│   │   │   │   ├── index-react-server.mjs
+│   │   │   │   ├── index.d.mts
+│   │   │   │   ├── index.d.ts
+│   │   │   │   ├── index.js
+│   │   │   │   ├── index.mjs
+│   │   │   │   ├── instrumentation-Unc20tLk.d.ts
+│   │   │   │   ├── lib
+│   │   │   │   │   └── types
+│   │   │   │   │       ├── internal.d.mts
+│   │   │   │   │       ├── internal.d.ts
+│   │   │   │   │       ├── internal.js
+│   │   │   │   │       └── internal.mjs
+│   │   │   │   ├── register-BpU9rFBJ.d.ts
+│   │   │   │   ├── register-QkB3HGjm.d.mts
+│   │   │   │   └── router-CAvh_Drx.d.mts
+│   │   │   └── production
+│   │   │       ├── browser-BbBXFHbO.d.ts
+│   │   │       ├── browser-C07r42Tt.d.mts
+│   │   │       ├── chunk-EAIF67OW.js
+│   │   │       ├── chunk-FDUMZGKM.mjs
+│   │   │       ├── chunk-FUSXQSWG.mjs
+│   │   │       ├── chunk-G5A35OQU.js
+│   │   │       ├── chunk-QN64DHI4.js
+│   │   │       ├── dom-export.d.mts
+│   │   │       ├── dom-export.d.ts
+│   │   │       ├── dom-export.js
+│   │   │       ├── dom-export.mjs
+│   │   │       ├── index-react-server-client-Da3kmxNd.d.ts
+│   │   │       ├── index-react-server-client-rcoGPJhU.d.mts
+│   │   │       ├── index-react-server-client.d.mts
+│   │   │       ├── index-react-server-client.d.ts
+│   │   │       ├── index-react-server-client.js
+│   │   │       ├── index-react-server-client.mjs
+│   │   │       ├── index-react-server.d.mts
+│   │   │       ├── index-react-server.d.ts
+│   │   │       ├── index-react-server.js
+│   │   │       ├── index-react-server.mjs
+│   │   │       ├── index.d.mts
+│   │   │       ├── index.d.ts
+│   │   │       ├── index.js
+│   │   │       ├── index.mjs
+│   │   │       ├── instrumentation-Unc20tLk.d.ts
+│   │   │       ├── lib
+│   │   │       │   └── types
+│   │   │       │       ├── internal.d.mts
+│   │   │       │       ├── internal.d.ts
+│   │   │       │       ├── internal.js
+│   │   │       │       └── internal.mjs
+│   │   │       ├── register-BpU9rFBJ.d.ts
+│   │   │       ├── register-QkB3HGjm.d.mts
+│   │   │       └── router-CAvh_Drx.d.mts
+│   │   ├── LICENSE.md
+│   │   ├── package.json
+│   │   └── README.md
+│   ├── react-router-dom
+│   │   ├── dist
+│   │   │   ├── index.d.mts
+│   │   │   ├── index.d.ts
+│   │   │   ├── index.js
+│   │   │   └── index.mjs
+│   │   ├── LICENSE.md
+│   │   ├── package.json
+│   │   └── README.md
 │   ├── read-cache
 │   │   ├── index.js
 │   │   ├── LICENSE
@@ -19031,6 +19127,12 @@
 │   │   ├── range.bnf
 │   │   ├── README.md
 │   │   └── semver.js
+│   ├── set-cookie-parser
+│   │   ├── lib
+│   │   │   └── set-cookie.js
+│   │   ├── LICENSE
+│   │   ├── package.json
+│   │   └── README.md
 │   ├── shebang-command
 │   │   ├── index.js
 │   │   ├── license
@@ -20299,25 +20401,43 @@
 │   ├── assets
 │   │   └── react.svg
 │   ├── components
+│   │   ├── Agent
+│   │   │   ├── AgentChatButton.jsx
+│   │   │   └── AgentChatPanel.jsx
 │   │   ├── Auth
-│   │   │   └── LoginPage.jsx
+│   │   │   ├── LoginPage.jsx
+│   │   │   └── RoleSelectionPage.jsx
 │   │   ├── Camera
 │   │   │   ├── CameraCapture.jsx
 │   │   │   ├── CameraControls.jsx
 │   │   │   └── CameraPreview.jsx
-│   │   └── Home
-│   │       ├── HomePage.jsx
-│   │       ├── ProjectCard.jsx
-│   │       ├── ProjectsGrid.jsx
-│   │       └── StatsCards.jsx
+│   │   ├── Guest
+│   │   │   └── GuestHomePage.jsx
+│   │   ├── Home
+│   │   ├── Host
+│   │   │   ├── HostHomePage.jsx
+│   │   │   ├── ProjectCard.jsx
+│   │   │   ├── ProjectsGrid.jsx
+│   │   │   └── StatsCards.jsx
+│   │   └── Room
+│   │       ├── ObjectsModal.jsx
+│   │       ├── PhotoGallery.jsx
+│   │       ├── PhotoUploader.jsx
+│   │       └── RoomDetailPage.jsx
 │   ├── firebase.js
 │   ├── hooks
-│   │   └── useAuth.js
+│   │   ├── useAgentChat.js
+│   │   ├── useAuth.js
+│   │   ├── useRoomObjects.js
+│   │   ├── useRoomPhotos.js
+│   │   ├── useRooms.js
+│   │   └── useUser.js
 │   ├── index.css
 │   ├── main.jsx
 │   └── utils
-│       └── uploadToGCS.js
+│       ├── gcsUpload.js
+│       └── testFirestore.js
 ├── tailwind.config.js
 └── vite.config.js
 
-3744 directories, 16577 files
+3762 directories, 16679 files

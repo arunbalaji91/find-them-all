@@ -59,9 +59,6 @@ export const RoleSelectionPage = ({ user, onRoleSelect }) => {
                 <p className="text-sm text-gray-500">
                   I'm checking into a property and want to document the room condition.
                 </p>
-                <span className="inline-block mt-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
-                  Coming Soon
-                </span>
               </div>
             </div>
           </button>

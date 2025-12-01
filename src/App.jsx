@@ -6,6 +6,7 @@ import { LoginPage } from './components/Auth/LoginPage';
 import { RoleSelectionPage } from './components/Auth/RoleSelectionPage';
 import { HostHomePage } from './components/Host/HostHomePage';
 import { GuestHomePage } from './components/Guest/GuestHomePage';
+import { GuestRoomDetailPage } from './components/Guest/GuestRoomDetailPage';
 import { RoomDetailPage } from './components/Room/RoomDetailPage';
 import './App.css';
 
@@ -82,6 +83,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<GuestHomePage user={user} onLogout={logout} />} />
+          <Route path="/guest/room/:roomId" element={<GuestRoomDetailPage user={user} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
