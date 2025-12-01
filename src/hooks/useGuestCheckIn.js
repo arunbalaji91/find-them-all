@@ -38,6 +38,7 @@ export const useGuestCheckIn = (userId, userName) => {
         const roomsRef = collection(db, 'rooms');
         const q = query(
             roomsRef,
+            where('status', '==', 'complete'),
             where('lockedByGuestId', '==', userId)
         );
 
@@ -105,7 +106,7 @@ export const useGuestCheckIn = (userId, userName) => {
         if (currentRoom) throw new Error('Already checked into a room. Check out first.');
 
         try {
-            console.log('🔑 Checking into room:', roomId);
+            console.log('🔒 Checking into room:', roomId);
 
             // Get room to verify it's not locked
             const roomRef = doc(db, 'rooms', roomId);
