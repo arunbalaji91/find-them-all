@@ -1,7 +1,7 @@
 import React from 'react';
-import { MapPin, RefreshCw, Loader, Sparkles } from 'lucide-react';
+import { MapPin, Loader, Sparkles } from 'lucide-react';
 
-export const HolidaySpotsBanner = ({ spots, loading, lastUpdated, onRefresh }) => {
+export const HolidaySpotsBanner = ({ spots, loading, lastUpdated }) => {
   const formatTime = (date) => {
     if (!date) return '';
     return date.toLocaleTimeString('en-US', { 
@@ -19,14 +19,6 @@ export const HolidaySpotsBanner = ({ spots, loading, lastUpdated, onRefresh }) =
           <Sparkles className="w-6 h-6" />
           <h2 className="text-xl font-bold">Today's Holiday Spots in the US</h2>
         </div>
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="flex items-center gap-1 text-white/80 hover:text-white transition text-sm"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Updating...' : 'Refresh'}
-        </button>
       </div>
 
       {/* Content */}
