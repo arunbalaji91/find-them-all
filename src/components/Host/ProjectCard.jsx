@@ -32,15 +32,15 @@ export const ProjectCard = ({ project }) => {
       icon: Upload, 
       text: 'Uploading' 
     },
+    ready_to_process: {
+      color: 'bg-purple-100 text-purple-800',
+      icon: Loader,
+      text: 'Ready to Process'
+    },
     processing: { 
       color: 'bg-yellow-100 text-yellow-800', 
       icon: Loader, 
       text: 'Processing' 
-    },
-    review: {
-      color: 'bg-orange-100 text-orange-800',
-      icon: AlertCircle,
-      text: 'Review'
     },
     completed: { 
       color: 'bg-green-100 text-green-800', 
@@ -130,14 +130,6 @@ export const ProjectCard = ({ project }) => {
           <p className="text-sm text-yellow-600 mt-2 flex items-center gap-1">
             <Loader className="w-3 h-3 animate-spin" />
             Processing...
-          </p>
-        )}
-
-        {/* REVIEW STATE */}
-        {project.status === 'review' && (
-          <p className="text-sm text-orange-600 mt-2 flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" />
-            Needs review
           </p>
         )}
 
