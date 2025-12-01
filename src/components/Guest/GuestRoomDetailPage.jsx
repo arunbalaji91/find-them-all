@@ -38,6 +38,10 @@ export const GuestRoomDetailPage = ({ user }) => {
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+
+  // Store checkoutId for photo upload
+  const [pendingCheckoutId, setPendingCheckoutId] = useState(null);
 
   // Guest check-in hook
   const { 
@@ -113,30 +117,60 @@ export const GuestRoomDetailPage = ({ user }) => {
     }
   };
 
-  // Handle checkout with photos
-  const handleCheckoutWithPhotos = () => {
-    setShowCheckoutModal(false);
-    // Trigger file input
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+  // Handle checkout with photos - create checkout first, then trigger file picker
+  const handleCheckoutWithPhotos = async () => {
+    try {
+      setCheckingOut(true);
+      setShowCheckoutModal(false);
+      
+      // Create checkout document first
+      const checkoutId = await startCheckout(roomId, true);
+      console.log('✅ Checkout created:', checkoutId);
+      
+      // Store the checkoutId for use after file selection
+      setPendingCheckoutId(checkoutId);
+      
+      // Trigger file input
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+    } catch (err) {
+      console.error('Failed to start checkout:', err);
+      alert('Failed to start checkout: ' + err.message);
+    } finally {
+      setCheckingOut(false);
     }
   };
 
-  // Handle photo selection
+  // Handle photo selection and upload
   const handleFileSelect = async (e) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      // User cancelled file picker
+      setPendingCheckoutId(null);
+      return;
+    }
+
+    if (!pendingCheckoutId) {
+      console.error('No pending checkout ID');
+      return;
+    }
+
+    const checkoutId = pendingCheckoutId;
+    setPendingCheckoutId(null);
 
     try {
       setUploading(true);
+      setUploadProgress(`Preparing ${files.length} photos...`);
 
-      // Create checkout first
-      const checkoutId = await startCheckout(roomId, true);
-
-      // Create upload batch for the checkout
+      // Create upload batch in the ROOM's uploadBatches (not checkout's)
+      // This uses the existing host flow infrastructure
       const batchData = {
         status: 'pending',
+        hostId: room.hostId,
         guestId: user.uid,
+        checkoutId: checkoutId,
+        isGuestCheckout: true,
         photos: Array.from(files).map(f => ({
           filename: f.name,
           size: f.size,
@@ -147,62 +181,89 @@ export const GuestRoomDetailPage = ({ user }) => {
       };
 
       const batchRef = await addDoc(
-        collection(db, 'rooms', roomId, 'checkouts', checkoutId, 'uploadBatches'),
+        collection(db, 'rooms', roomId, 'uploadBatches'),
         batchData
       );
 
-      // Store files for upload when signed URLs arrive
-      window._pendingCheckoutFiles = window._pendingCheckoutFiles || {};
-      window._pendingCheckoutFiles[batchRef.id] = Array.from(files);
+      console.log('📦 Upload batch created:', batchRef.id);
 
-      // Listen for signed URLs
+      // Store files for upload when signed URLs arrive
+      const filesToUpload = Array.from(files);
+
+      // Listen for signed URLs from the agent
       const unsubscribe = onSnapshot(
-        doc(db, 'rooms', roomId, 'checkouts', checkoutId, 'uploadBatches', batchRef.id),
+        doc(db, 'rooms', roomId, 'uploadBatches', batchRef.id),
         async (snapshot) => {
           const batch = snapshot.data();
           if (!batch) return;
 
+          console.log('📦 Batch status:', batch.status);
+
           if (batch.status === 'ready_to_upload' && batch.photos) {
-            const filesToUpload = window._pendingCheckoutFiles[batchRef.id];
-            if (filesToUpload) {
-              try {
-                // Upload each file
-                for (const photo of batch.photos) {
-                  const file = filesToUpload.find(f => f.name === photo.filename);
-                  if (!file || !photo.signedUrl) continue;
+            try {
+              setUploadProgress(`Uploading ${filesToUpload.length} photos...`);
 
-                  const response = await fetch(photo.signedUrl, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': file.type || 'image/jpeg' },
-                    body: file
-                  });
-
-                  if (!response.ok) {
-                    throw new Error(`Failed to upload ${photo.filename}`);
-                  }
+              // Upload each file to GCS using signed URLs
+              let uploadedCount = 0;
+              for (const photo of batch.photos) {
+                const file = filesToUpload.find(f => f.name === photo.filename);
+                if (!file || !photo.signedUrl) {
+                  console.warn('Skipping photo:', photo.filename);
+                  continue;
                 }
 
-                // Mark as uploaded
-                await updateDoc(snapshot.ref, {
-                  status: 'uploaded',
-                  uploadedAt: serverTimestamp()
+                setUploadProgress(`Uploading ${++uploadedCount}/${filesToUpload.length}...`);
+
+                const response = await fetch(photo.signedUrl, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': file.type || 'image/jpeg' },
+                  body: file
                 });
 
-                // Cleanup
-                delete window._pendingCheckoutFiles[batchRef.id];
-                unsubscribe();
+                if (!response.ok) {
+                  throw new Error(`Failed to upload ${photo.filename}: ${response.status}`);
+                }
 
-              } catch (err) {
-                console.error('Upload error:', err);
-                await updateDoc(snapshot.ref, {
-                  status: 'failed',
-                  error: err.message
-                });
+                console.log('✅ Uploaded:', photo.filename);
               }
+
+              // Mark batch as uploaded
+              await updateDoc(snapshot.ref, {
+                status: 'uploaded',
+                uploadedAt: serverTimestamp()
+              });
+
+              // NOW update the checkout document status to 'uploaded'
+              // This triggers the on_checkout_updated Cloud Function!
+              setUploadProgress('Finalizing checkout...');
+              
+              await updateDoc(doc(db, 'rooms', roomId, 'checkouts', checkoutId), {
+                status: 'uploaded',
+                photosUploaded: true,
+                photoCount: uploadedCount,
+                uploadBatchId: batchRef.id,
+                updatedAt: serverTimestamp()
+              });
+
+              console.log('✅ Checkout status updated to "uploaded" - trigger should fire!');
+              setUploadProgress('Processing your photos...');
+
+              unsubscribe();
+
+            } catch (err) {
+              console.error('❌ Upload error:', err);
+              await updateDoc(snapshot.ref, {
+                status: 'failed',
+                error: err.message
+              });
+              alert('Failed to upload photos: ' + err.message);
+              setUploading(false);
             }
-          } else if (batch.status === 'uploaded' || batch.status === 'failed') {
+          } else if (batch.status === 'failed') {
+            console.error('❌ Batch failed');
             unsubscribe();
             setUploading(false);
+            alert('Photo upload failed. Please try again.');
           }
         }
       );
@@ -213,7 +274,7 @@ export const GuestRoomDetailPage = ({ user }) => {
       }
 
     } catch (err) {
-      console.error('Error starting checkout with photos:', err);
+      console.error('❌ Error in handleFileSelect:', err);
       alert('Failed to upload photos: ' + err.message);
       setUploading(false);
     }
@@ -324,7 +385,7 @@ export const GuestRoomDetailPage = ({ user }) => {
           </div>
 
           {/* Status Banner */}
-          {isCheckedIn && (
+          {isCheckedIn && !uploading && !currentCheckout?.status && (
             <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-sm text-green-800">
                 <span className="font-medium">✓ You're checked in!</span> Enjoy your stay. Click "Check Out" when you're ready to leave.
@@ -335,7 +396,7 @@ export const GuestRoomDetailPage = ({ user }) => {
           {uploading && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2">
               <Loader className="w-4 h-4 text-blue-600 animate-spin" />
-              <p className="text-sm text-blue-800">Uploading photos and processing checkout...</p>
+              <p className="text-sm text-blue-800">{uploadProgress || 'Processing...'}</p>
             </div>
           )}
 
