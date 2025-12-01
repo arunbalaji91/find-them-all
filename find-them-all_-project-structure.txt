@@ -1,13 +1,12 @@
 .
 ├── dist
 │   ├── assets
-│   │   ├── index-BFoWRy45.css
-│   │   └── index-oGQG6Rln.js
+│   │   ├── index-CkNotMxG.js
+│   │   └── index-DLvJc46I.css
 │   ├── index.html
 │   └── vite.svg
 ├── eslint.config.js
 ├── find-them-all_-project-structure.txt
-├── FrontEnd-project-structure.txt
 ├── index.html
 ├── node_modules
 │   ├── @alloc
@@ -20412,7 +20411,13 @@
 │   │   │   ├── CameraControls.jsx
 │   │   │   └── CameraPreview.jsx
 │   │   ├── Guest
-│   │   │   └── GuestHomePage.jsx
+│   │   │   ├── CheckInSuccessModal.jsx
+│   │   │   ├── CheckoutModal.jsx
+│   │   │   ├── GuestHomePage.jsx
+│   │   │   ├── GuestRoomCard.jsx
+│   │   │   ├── GuestRoomDetailPage.jsx
+│   │   │   ├── HolidaySpotsBanner.jsx
+│   │   │   └── RefundSummaryModal.jsx
 │   │   ├── Home
 │   │   ├── Host
 │   │   │   ├── HostHomePage.jsx
@@ -20427,7 +20432,10 @@
 │   ├── firebase.js
 │   ├── hooks
 │   │   ├── useAgentChat.js
+│   │   ├── useAllRooms.js
 │   │   ├── useAuth.js
+│   │   ├── useGuestCheckIn.js
+│   │   ├── useHolidaySpots.js
 │   │   ├── useRoomObjects.js
 │   │   ├── useRoomPhotos.js
 │   │   ├── useRooms.js
@@ -20440,4 +20448,4 @@
 ├── tailwind.config.js
 └── vite.config.js
 
-3762 directories, 16679 files
+3762 directories, 16687 files

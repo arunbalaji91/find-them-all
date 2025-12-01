@@ -68,7 +68,13 @@ export const useRooms = (userId) => {
                 agentMessage: 'Setting up your room...',
                 photosCount: 0,
                 objectsCount: 0,
-                gcsPath: null  // Agent will set this after creating GCS folder
+                gcsPath: null,  // Agent will set this after creating GCS folder
+                // Guest lock fields (initialized for check-in flow)
+                isLocked: false,
+                lockedByGuestId: null,
+                lockedByGuestName: null,
+                lockedAt: null,
+                depositAmount: 100
             };
 
             const docRef = await addDoc(collection(db, 'rooms'), roomData);
