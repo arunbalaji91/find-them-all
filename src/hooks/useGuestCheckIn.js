@@ -110,13 +110,17 @@ export const useGuestCheckIn = (userId, userName) => {
 
             // Get room to verify it's not locked
             const roomRef = doc(db, 'rooms', roomId);
+
+            console.log('📖 Attempting to read room...');
             const roomSnap = await getDoc(roomRef);
+            console.log('✅ Room read successful');
 
             if (!roomSnap.exists()) {
                 throw new Error('Room not found');
             }
 
             const roomData = roomSnap.data();
+            console.log('📋 Room data:', roomData.status, roomData.isLocked);
 
             if (roomData.isLocked) {
                 throw new Error('Room is already occupied by another guest');
@@ -127,6 +131,7 @@ export const useGuestCheckIn = (userId, userName) => {
             }
 
             // Lock the room for this guest
+            console.log('📝 Attempting to update room...');
             await updateDoc(roomRef, {
                 isLocked: true,
                 lockedByGuestId: userId,
@@ -134,6 +139,7 @@ export const useGuestCheckIn = (userId, userName) => {
                 lockedAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
             });
+            console.log('✅ Room update successful');
 
             console.log('✅ Successfully checked into room');
             return true;
