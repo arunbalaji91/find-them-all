@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, Tag, Loader, Camera, Play } from 'lucide-react';
+import { ArrowLeft, Trash2, Tag, Loader, Camera, Play, UserCheck, Calendar, IdCard } from 'lucide-react';
 import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { formatTimestamp } from '../../utils/dateFormat';
 import { PhotoGallery } from './PhotoGallery';
 import { PhotoUploader } from './PhotoUploader';
 import { ObjectsModal } from './ObjectsModal';
@@ -187,6 +188,51 @@ export const RoomDetailPage = ({ user }) => {
                 <span className="font-medium">🤖 Agent: </span>
                 {room.agentMessage}
               </p>
+            </div>
+          )}
+
+          {/* Guest Booking Info Panel */}
+          {room.isLocked && room.lockedByGuestName && (
+            <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <div className="bg-orange-600 text-white p-2 rounded-full">
+                    <UserCheck className="w-5 h-5" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-orange-900 mb-1">Room Currently Booked</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-orange-800 font-medium">Guest:</span>
+                      <span className="text-sm text-orange-900">{room.lockedByGuestName}</span>
+                    </div>
+                    {room.lockedByGuestId && (
+                      <div className="flex items-start gap-2">
+                        <IdCard className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs text-orange-700 font-mono break-all select-all" title="Click to select and copy">
+                            {room.lockedByGuestId}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {room.lockedAt && (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                          <span className="text-sm text-orange-800">
+                            {formatTimestamp(room.lockedAt, 'full')}
+                          </span>
+                        </div>
+                        <div className="ml-6 text-xs text-orange-600">
+                          ({formatTimestamp(room.lockedAt, 'relative')})
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

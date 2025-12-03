@@ -112,7 +112,7 @@ export const GuestRoomCard = ({
         {isLockedByOther && (
           <div className="text-sm text-gray-500 mb-3 flex items-center gap-1">
             <Lock className="w-4 h-4 text-red-500" />
-            <span>Currently occupied by {room.lockedByGuestName || 'a guest'}</span>
+            <span>Currently occupied</span>
           </div>
         )}
 

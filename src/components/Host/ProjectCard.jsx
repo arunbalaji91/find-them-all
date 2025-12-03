@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Upload, Loader, CheckCircle, AlertCircle } from 'lucide-react';
+import { Box, Upload, Loader, CheckCircle, AlertCircle, UserCheck, Calendar } from 'lucide-react';
+import { formatTimestamp, truncateString } from '../../utils/dateFormat';
 
 export const ProjectCard = ({ project }) => {
   const navigate = useNavigate();
@@ -104,6 +105,14 @@ export const ProjectCard = ({ project }) => {
           <StatusIcon className="w-3 h-3" />
           {config.text}
         </div>
+
+        {/* GUEST BOOKING BADGE */}
+        {project.isLocked && project.lockedByGuestName && (
+          <div className="absolute bottom-2 left-2 bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 max-w-[calc(100%-1rem)]">
+            <UserCheck className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">Booked by {project.lockedByGuestName}</span>
+          </div>
+        )}
       </div>
 
       {/* CONTENT */}
@@ -139,6 +148,29 @@ export const ProjectCard = ({ project }) => {
             <AlertCircle className="w-3 h-3" />
             Failed to process
           </p>
+        )}
+
+        {/* GUEST BOOKING DETAILS */}
+        {project.isLocked && project.lockedByGuestName && (
+          <div className="mt-3 pt-3 border-t border-gray-200 space-y-1">
+            <div className="flex items-center gap-2 text-xs text-gray-700">
+              <UserCheck className="w-3.5 h-3.5 text-orange-600 flex-shrink-0" />
+              <span className="font-medium truncate">{project.lockedByGuestName}</span>
+            </div>
+            {project.lockedByGuestId && (
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span className="ml-5 font-mono" title={project.lockedByGuestId}>
+                  ID: {truncateString(project.lockedByGuestId, 8)}
+                </span>
+              </div>
+            )}
+            {project.lockedAt && (
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{formatTimestamp(project.lockedAt, 'full')}</span>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
